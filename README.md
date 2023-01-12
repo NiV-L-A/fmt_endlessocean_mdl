@@ -7,3 +7,6 @@ If you need a script that parses the materials and more, but not the skeleton da
 - GitHub: https://github.com/NiV-L-A/fmt_endlessocean_mdl
 - Author: NiV-L-A
 - Special thanks to Hiroshi, Joschka and the people at the XeNTaX discord server
+
+# How to install
+- Put the fmt_endlessocean_mdl.py file in the noesis/plugins/python folder.
