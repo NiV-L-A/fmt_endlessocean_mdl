@@ -10,3 +10,6 @@ If you need a script that parses the materials and more, but not the skeleton da
 
 # How to install
 - Put the fmt_endlessocean_mdl.py file in the noesis/plugins/python folder.
+
+# Demonstration
+- https://www.youtube.com/watch?v=XvIQJMB7DG4
