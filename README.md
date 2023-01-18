@@ -16,6 +16,7 @@ If you need a script that parses the materials and more, but not the skeleton da
 - Added the possibility to adjust a mesh's bone coordinates based on the values from its MeshInfo.Origin (added option in settings: AdjustMeshBone)
 - Removed by default the "object's Mat43 with bone's Mat43" swap (added option in settings: SwapHiListBoneMat)
 
+
 - Version 0.1 (12/01/2023)
 - Initial Version
 
