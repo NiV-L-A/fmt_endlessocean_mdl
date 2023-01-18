@@ -10,14 +10,14 @@ If you need a script that parses the materials and more, but not the skeleton da
 - *If you have any issues, join this discord server and contact NiV-L-A: https://discord.gg/4hmcsmPMDG - Endless Ocean Wiki Server
 
 # Changelog
-- Version 0.2 (18/01/2023)
+## Version 0.2 (18/01/2023)
 - Meshes get their proprer transformation applied.
 - Added the scale component to each object's mat43
 - Added the possibility to adjust a mesh's bone coordinates based on the values from its MeshInfo.Origin (added option in settings: AdjustMeshBone)
 - Removed by default the "object's Mat43 with bone's Mat43" swap (added option in settings: SwapHiListBoneMat)
 
 
-- Version 0.1 (12/01/2023)
+## Version 0.1 (12/01/2023)
 - Initial Version
 
 # Notes
