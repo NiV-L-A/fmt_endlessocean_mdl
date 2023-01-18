@@ -5,7 +5,7 @@ from inc_noesis import *
 #///////////////////////////////////////////////////////////////////////
 #
 # Endless Ocean 1 & 2 .mdl Noesis Plugin
-# Version: 0.1
+# Version: 0.2
 # GitHub: https://github.com/NiV-L-A/fmt_endlessocean_mdl
 # Author: NiV-L-A
 # Special thanks to Hiroshi, Joschka and the people at the XeNTaX discord server
@@ -21,6 +21,12 @@ from inc_noesis import *
 #///////////////////////////////////////////////////////////////////////
 #
 # (1) Changelog
+#
+# Version 0.2 (18/01/2023)
+#	- Meshes get their proprer transformation applied.
+#	- Added the scale component to each object's mat43
+#	- Added the possibility to adjust a mesh's bone coordinates based on the values from its MeshInfo.Origin (added option in settings: AdjustMeshBone)
+#	- Removed by default the "object's Mat43 with bone's Mat43" swap (added option in settings: SwapHiListBoneMat)
 #
 # Version 0.1 (12/01/2023)
 #	- Initial Version
@@ -45,6 +51,8 @@ LoadAnim				= 1 #1 - Loads animation
 LoadAnimTrans			= 1 #1 - Loads the animation's translation channel
 LoadAnimRot				= 1 #1 - Loads the animation's rotation channel
 LoadAnimScale			= 1 #1 - Loads the animation's scale channel
+AdjustMeshBone			= 0 #0 - Tries to adjust the mesh's bone by looking at the MeshInfo's Origin
+SwapHiListBoneMat		= 0 #0 - Swap the hierarchy list matrix with the bone matrix.
 
 PrintMeshCount			= 0 #0 - Prints the mesh count
 PrintMOTCount			= 0 #0 - Prints the .mot (animations) count
@@ -103,15 +111,16 @@ def noepyLoadModel(data, mdlList):
 				for j in range(0, VDL.Mesh[i].SkelData.Header.VtxCount):
 					if (VDL.Mesh[i].SkelData.Weights[j * 0x10] & 0x80) == 0x80:
 						VDL.Mesh[i].SkelData.Weights[j * 0x10] ^= 0x80
-					
+	
 	#Swap obj's mat43 with bone's mat43. todo: optimize it to only do *that* bone once
-	for i in range(0, Header.CountsOffs.MeshCount):
-		if Header.MeshInfo[i].MeshType == 0x50:
-			for j in range(0, Header.MeshInfo[i].BoneCount):
-				CurrBoneName = VDL.Mesh[i].SkelData.Bones[j]
-				index = next((k for k, item in enumerate(VDL.HiList.Object) if item.Name == CurrBoneName), None)
-				if index != None:
-					VDL.HiList.Object[index].Mat43 = VDL.Mesh[i].SkelData.Mat[j]
+	if SwapHiListBoneMat == 1:
+		for i in range(0, Header.CountsOffs.MeshCount):
+			if Header.MeshInfo[i].MeshType == 0x50:
+				for j in range(0, Header.MeshInfo[i].BoneCount):
+					CurrBoneName = VDL.Mesh[i].SkelData.Bones[j]
+					index = next((k for k, item in enumerate(VDL.HiList.Object) if item.Name == CurrBoneName), None)
+					if index != None:
+						VDL.HiList.Object[index].Mat43 = VDL.Mesh[i].SkelData.Mat[j]
 
 	#Get PName and create bones
 	for i in range(0, Header.CountsOffs.ObjectsCount):
@@ -148,13 +157,19 @@ def noepyLoadModel(data, mdlList):
 		for i in range(0, Header.CountsOffs.MeshCount):
 			print("Mesh:", i)
 			PrintHexArray2(VDL.Mesh[i].SkelData.WeightsIdx)
-		
+			
 	#Binds
 	for i in range(0, Header.CountsOffs.MeshCount):
 		if Header.MeshInfo[i].MeshType == 0x50:
 			rapi.rpgBindBoneIndexBufferOfs(VDL.Mesh[i].SkelData.WeightsIdx,noesis.RPGEODATA_UBYTE, 4, 0, 4)
 			rapi.rpgBindBoneWeightBufferOfs(VDL.Mesh[i].SkelData.Weights, noesis.RPGEODATA_FLOAT, 0x10, 0, 4)
 		rapi.rpgBindPositionBufferOfs(VDL.Mesh[i].MeshData.VtxBuff, noesis.RPGEODATA_FLOAT, VDL.Mesh[i].MeshHeader.VtxStride, 0)
+		#Transform mesh by HiList's Mat43
+		HiListMeshIdx = next((j for j, item in enumerate(VDL.HiList.Object) if (item.Code & 0xF0) == 0x20 and item.Idx == i), None)
+		rapi.rpgSetTransform(VDL.HiList.Object[HiListMeshIdx].Mat43)
+		if AdjustMeshBone == 1:
+			boneIdx = next((index for (index, d) in enumerate(bones) if d.name == VDL.HiList.Object[HiListMeshIdx].Name), None)
+			bones[boneIdx].setMatrix(VDL.HiList.Object[HiListMeshIdx].Mat43 * NoeMat43((NoeVec3((1.0, 0.0, 0.0)), NoeVec3((0.0, 1.0, 0.0)), NoeVec3((0.0, 0.0, 1.0)), Header.MeshInfo[i].Origin)))
 		for j in range(0, Header.MeshInfo[i].IdxSectionsCount): #For every index section
 			for k in range(0, len(VDL.Mesh[i].MeshData.Indices[j].Idxs)): #For every draw call
 				cnt = VDL.Mesh[i].MeshData.Indices[j].cntList[k]
@@ -228,18 +243,21 @@ def noepyLoadModel(data, mdlList):
 					print("\tCurrHiListID:", hex(CurrHiListID))
 				if (CurrTRSPoseIdxID & 1) == 1: #Bone has translation channel
 					if LoadAnimTrans == 1 and MOL.SemanticFlags[CurrIdxBoneRemap] & 0x10 == 0x10: #Confirmation
+						#print("\t\tT", hex(MOT.Data.TRSPoseIdx[MOL.MOTInfo[i].Idx[MOL.MOTInfo[i].BoneRemap[j]]].Trans))
 						for k in range(0, MOT.Header.KeyFramesTransCount):
 							posNoeKeyFramedValues.append(NoeKeyFramedValue(MOT.Data.TransKeyFrames[k],MOT.Data.Trans[k + MOT.Data.TRSPoseIdx[MOL.MOTInfo[i].Idx[MOL.MOTInfo[i].BoneRemap[j]]].Trans]))
 						keyFramedBoneList[list(BoneIdxsDict.keys())[list(BoneIdxsDict.values()).index(CurrIdxBoneRemap)]].setTranslation(posNoeKeyFramedValues, noesis.NOEKF_TRANSLATION_VECTOR_3)
 					MOT.Data.TRSPoseIdx[MOL.MOTInfo[i].Idx[MOL.MOTInfo[i].BoneRemap[j]]].ID -= 1
 				elif (CurrTRSPoseIdxID & 2) == 2: #Bone has rotation channel
 					if LoadAnimRot == 1 and MOL.SemanticFlags[CurrIdxBoneRemap] & 0x20 == 0x20: #Confirmation
+						#print("\t\tR", hex(MOT.Data.TRSPoseIdx[MOL.MOTInfo[i].Idx[MOL.MOTInfo[i].BoneRemap[j]]].Rot))
 						for k in range(0, MOT.Header.KeyFramesRotCount):
 							rotNoeKeyFramedValues.append(NoeKeyFramedValue(MOT.Data.RotKeyFrames[k], MOT.Data.Rot[k + MOT.Data.TRSPoseIdx[MOL.MOTInfo[i].Idx[MOL.MOTInfo[i].BoneRemap[j]]].Rot]))
 						keyFramedBoneList[list(BoneIdxsDict.keys())[list(BoneIdxsDict.values()).index(CurrIdxBoneRemap)]].setRotation(rotNoeKeyFramedValues, noesis.NOEKF_ROTATION_QUATERNION_4)
 					MOT.Data.TRSPoseIdx[MOL.MOTInfo[i].Idx[MOL.MOTInfo[i].BoneRemap[j]]].ID -= 2
 				elif (CurrTRSPoseIdxID & 4) == 4: #Bone has scale channel
 					if LoadAnimScale == 1 and MOL.SemanticFlags[CurrIdxBoneRemap] & 0x40 == 0x40: #Confirmation
+						#print("\t\tS", hex(MOT.Data.TRSPoseIdx[MOL.MOTInfo[i].Idx[MOL.MOTInfo[i].BoneRemap[j]]].Scale))
 						for k in range(0, MOT.Header.KeyFramesScaleCount):
 							scaleNoeKeyFramedValues.append(NoeKeyFramedValue(MOT.Data.ScaleKeyFrames[k],MOT.Data.Scale[k + MOT.Data.TRSPoseIdx[MOL.MOTInfo[i].Idx[MOL.MOTInfo[i].BoneRemap[j]]].Scale]))
 						keyFramedBoneList[list(BoneIdxsDict.keys())[list(BoneIdxsDict.values()).index(CurrIdxBoneRemap)]].setScale(scaleNoeKeyFramedValues, noesis.NOEKF_SCALE_VECTOR_3)
@@ -337,7 +355,7 @@ def noepyLoadModel(data, mdlList):
 #			unk3
 #			Off
 #VDL
-#	HiList (Hierarchy List)
+#	HiList
 #		ObjectsCount
 #		LODCount
 #		HiListOff
@@ -826,6 +844,7 @@ class Object_t:
 		self.Scale = NoeVec3.fromBytes(bs.readBytes(0x0C),1)
 		self.Name = getString(bs)
 		self.Mat43 = self.Rot.toMat43().inverse()
+		self.Mat43 *= NoeMat43(( NoeVec3((self.Scale[0], 0.0, 0.0)), NoeVec3((0.0, self.Scale[1], 0.0)), NoeVec3((0.0, 0.0, self.Scale[2])), NoeVec3((0.0, 0.0, 0.0)) ))
 		self.Mat43[3] = self.Trans
 	
 class Header_t:
